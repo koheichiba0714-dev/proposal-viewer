@@ -248,6 +248,10 @@ ${input.recommendations.length > 0 ? input.recommendations.map(r => `- ${r}`).jo
     // Escape sampleHtml for srcdoc attribute (only double quotes need escaping)
     const escapedSampleHtml = input.sampleHtml.replace(/"/g, '&quot;');
 
+    // Use Google PageSpeed Insights screenshot thumbnail (free, no API key needed for basic usage)
+    const screenshotUrl = `https://image.thum.io/get/width/600/crop/900/noanimate/${input.websiteUrl}`;
+    const screenshotFallback = `https://api.microlink.io/?url=${encodeURIComponent(input.websiteUrl)}&screenshot=true&meta=false&embed=screenshot.url`;
+
     const sitePreviewHtml = `
 <!-- 現在のサイトプレビュー & リニューアル後イメージ（システム自動挿入） -->
 <div style="max-width:700px;margin:40px auto 20px;">
@@ -257,9 +261,18 @@ ${input.recommendations.length > 0 ? input.recommendations.map(r => `- ${r}`).jo
   </div>
   <div style="border:2px solid #94a3b8;border-top:none;border-radius:0 0 4px 4px;overflow:hidden;background:#fff;position:relative;">
     <span style="position:absolute;top:10px;left:10px;background:rgba(71,85,105,0.92);color:#fff;padding:4px 14px;border-radius:2px;font-size:11px;font-weight:700;letter-spacing:1px;z-index:2;">📍 現在のサイト</span>
-    <iframe src="${input.websiteUrl}" title="現在のWEBサイト" loading="lazy" style="width:100%;border:none;min-height:70vh;display:block;"></iframe>
+    <a href="${input.websiteUrl}" target="_blank" rel="noopener" style="display:block;">
+      <img
+        src="${screenshotUrl}"
+        alt="${input.companyName}様の現在のWEBサイト"
+        style="width:100%;display:block;min-height:300px;object-fit:cover;object-position:top;background:#f1f5f9;"
+        onerror="this.onerror=null;this.src='${screenshotFallback}';this.style.minHeight='200px';"
+      />
+    </a>
   </div>
-  <div style="text-align:center;padding:8px 0;"><a href="${input.websiteUrl}" target="_blank" style="font-size:11px;color:#64748b;">サイトが表示されない場合はこちらをクリック →</a></div>
+  <div style="text-align:center;padding:12px 0;">
+    <a href="${input.websiteUrl}" target="_blank" rel="noopener" style="display:inline-block;background:#64748b;color:#fff;padding:10px 28px;border-radius:4px;text-decoration:none;font-size:13px;font-weight:600;">🔗 現在のサイトを開く</a>
+  </div>
 </div>
 <div style="max-width:700px;margin:20px auto;padding:24px 0;text-align:center;">
   <p style="font-size:16px;font-weight:700;color:#1b2e4b;margin:0;">▼ 上記の課題をすべて解決したリニューアル後のイメージがこちらです ▼</p>
