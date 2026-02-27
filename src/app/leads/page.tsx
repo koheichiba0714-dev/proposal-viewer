@@ -233,7 +233,9 @@ export default function LeadsPage() {
             if (!res.ok || data.error) {
                 alert(`エラー: ${data.error || `HTTP ${res.status}`}`);
             } else {
-                const proposalUrl = `${window.location.origin}${data.proposal_url}`;
+                // 顧客共有用URLは常にVercelの公開URLを使用
+                const vercelBase = 'https://proposal-viewer-zeta.vercel.app';
+                const proposalUrl = `${vercelBase}${data.proposal_url}`;
                 navigator.clipboard.writeText(proposalUrl);
                 alert(`✅ 診断レポートを生成しました！\n\nURL: ${proposalUrl}\n\nクリップボードにコピーしました。`);
                 loadDetail(selected.id);
