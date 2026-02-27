@@ -854,12 +854,13 @@ export default function LeadsPage() {
                                                                         {new Date(p.created_at).toLocaleString('ja-JP')}
                                                                     </div>
                                                                 </div>
-                                                                <a href={`/proposals/${p.token}`} target="_blank" className="btn btn-sm btn-primary" rel="noopener">
+                                                                <a href={`https://proposal-viewer-zeta.vercel.app/proposals/${p.token}`} target="_blank" className="btn btn-sm btn-primary" rel="noopener">
                                                                     🔗 レポート表示
                                                                 </a>
                                                                 <button className="btn btn-sm" onClick={() => {
-                                                                    navigator.clipboard.writeText(`${window.location.origin}/proposals/${p.token}`);
-                                                                    alert('URLをコピーしました');
+                                                                    const shareUrl = `https://proposal-viewer-zeta.vercel.app/proposals/${p.token}`;
+                                                                    navigator.clipboard.writeText(shareUrl);
+                                                                    alert(`URLをコピーしました\n${shareUrl}`);
                                                                 }}>📋 URL取得</button>
                                                             </div>
                                                         ))}
