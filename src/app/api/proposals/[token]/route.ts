@@ -93,20 +93,25 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     }
 
     // 2. Fall back to Supabase (works on Vercel)
-    const supabaseData = await getReport(token);
-    if (!supabaseData) {
-        return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    }
+    try {
+        const supabaseData = await getReport(token);
+        if (!supabaseData) {
+            return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        }
 
-    return NextResponse.json({
-        proposal: {
-            title: `${supabaseData.client_name}様 無料WEB診断レポート`,
-            improvements: '[]',
-            sample_url: '',
-            report_html: supabaseData.content,
-            created_at: new Date().toISOString(),
-        },
-        company: {},
-        analysis: null,
-    });
+        return NextResponse.json({
+            proposal: {
+                title: `${supabaseData.client_name}様 無料WEB診断レポート`,
+                improvements: '[]',
+                sample_url: '',
+                report_html: supabaseData.content,
+                created_at: new Date().toISOString(),
+            },
+            company: {},
+            analysis: null,
+        });
+    } catch (err) {
+        console.error('[proposals/token] Supabase fallback error:', err);
+        return NextResponse.json({ error: 'Service unavailable' }, { status: 503 });
+    }
 }
