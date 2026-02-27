@@ -56,3 +56,47 @@ export async function updateProposalContent(proposalId: string, html: string): P
         throw new Error(`Supabase UPDATE failed: ${error.message}`);
     }
 }
+
+/**
+ * Save a diagnostic report to Supabase with a token for public access
+ */
+export async function saveReport(token: string, reportHtml: string, clientName: string): Promise<void> {
+    const { error } = await supabase
+        .from('proposals')
+        .upsert({
+            token,
+            client_name: clientName,
+            content: reportHtml,
+        }, { onConflict: 'token' });
+
+    if (error) {
+        // If upsert fails (token column may not exist), try insert
+        const { error: insertErr } = await supabase
+            .from('proposals')
+            .insert({
+                token,
+                client_name: clientName,
+                content: reportHtml,
+            });
+        if (insertErr) {
+            throw new Error(`Supabase saveReport failed: ${insertErr.message}`);
+        }
+    }
+}
+
+/**
+ * Get a diagnostic report from Supabase by token
+ */
+export async function getReport(token: string): Promise<{ content: string; client_name: string } | null> {
+    const { data, error } = await supabase
+        .from('proposals')
+        .select('content, client_name')
+        .eq('token', token)
+        .single();
+
+    if (error || !data) {
+        return null;
+    }
+
+    return data;
+}

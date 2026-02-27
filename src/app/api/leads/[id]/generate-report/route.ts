@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, generateToken } from '@/lib/db';
 import { generateSampleLP, generateDiagnosticReport } from '@/lib/gemini';
-import { deployToSupabase } from '@/lib/supabase';
+import { deployToSupabase, saveReport } from '@/lib/supabase';
 
 function parseJSON(str: unknown): string[] {
     if (Array.isArray(str)) return str;
@@ -187,6 +187,14 @@ export async function POST(
             }))),
             reportHtml
         );
+
+        // Also save to Supabase for external access via Vercel
+        try {
+            await saveReport(token, reportHtml, (lead.company_name as string) || '企業');
+            console.log(`[generate-report] Supabaseにレポート保存完了 (token: ${token})`);
+        } catch (supaErr) {
+            console.warn('[generate-report] Supabaseレポート保存失敗:', supaErr);
+        }
 
         db.prepare("UPDATE leads SET status = 'proposal_sent', report_progress = '完了', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
             .run(leadId);
