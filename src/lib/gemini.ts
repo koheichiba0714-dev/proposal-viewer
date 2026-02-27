@@ -131,6 +131,7 @@ interface ReportInput {
     recommendations: string[];
     checks: { label: string; pass: boolean }[];
     sampleUrl: string;  // Vercel URL of the renewal LP
+    sampleHtml: string;  // Raw HTML of the renewal LP
 }
 
 export async function generateDiagnosticReport(input: ReportInput): Promise<string> {
@@ -244,6 +245,9 @@ ${input.recommendations.length > 0 ? input.recommendations.map(r => `- ${r}`).jo
     // Programmatically inject site preview iframes
     // (Gemini cannot be trusted to copy HTML verbatim)
     // ============================================
+    // Escape sampleHtml for srcdoc attribute (only double quotes need escaping)
+    const escapedSampleHtml = input.sampleHtml.replace(/"/g, '&quot;');
+
     const sitePreviewHtml = `
 <!-- 現在のサイトプレビュー & リニューアル後イメージ（システム自動挿入） -->
 <div style="max-width:700px;margin:40px auto 20px;">
@@ -253,8 +257,9 @@ ${input.recommendations.length > 0 ? input.recommendations.map(r => `- ${r}`).jo
   </div>
   <div style="border:2px solid #94a3b8;border-top:none;border-radius:0 0 4px 4px;overflow:hidden;background:#fff;position:relative;">
     <span style="position:absolute;top:10px;left:10px;background:rgba(71,85,105,0.92);color:#fff;padding:4px 14px;border-radius:2px;font-size:11px;font-weight:700;letter-spacing:1px;z-index:2;">📍 現在のサイト</span>
-    <iframe src="${input.websiteUrl}" title="現在のWEBサイト" sandbox="allow-scripts allow-same-origin" loading="lazy" style="width:100%;border:none;min-height:70vh;display:block;"></iframe>
+    <iframe src="${input.websiteUrl}" title="現在のWEBサイト" loading="lazy" style="width:100%;border:none;min-height:70vh;display:block;"></iframe>
   </div>
+  <div style="text-align:center;padding:8px 0;"><a href="${input.websiteUrl}" target="_blank" style="font-size:11px;color:#64748b;">サイトが表示されない場合はこちらをクリック →</a></div>
 </div>
 <div style="max-width:700px;margin:20px auto;padding:24px 0;text-align:center;">
   <p style="font-size:16px;font-weight:700;color:#1b2e4b;margin:0;">▼ 上記の課題をすべて解決したリニューアル後のイメージがこちらです ▼</p>
@@ -266,7 +271,7 @@ ${input.recommendations.length > 0 ? input.recommendations.map(r => `- ${r}`).jo
   </div>
   <div style="border:2px solid #22a050;border-top:none;border-radius:0 0 4px 4px;overflow:hidden;background:#fff;position:relative;">
     <span style="position:absolute;top:10px;left:10px;background:rgba(27,107,58,0.92);color:#fff;padding:4px 14px;border-radius:2px;font-size:11px;font-weight:700;letter-spacing:1px;z-index:2;">🆕 リニューアル後</span>
-    <iframe src="${input.sampleUrl}" title="リニューアルイメージ" sandbox="allow-scripts allow-same-origin" style="width:100%;border:none;min-height:80vh;display:block;"></iframe>
+    <iframe srcdoc="${escapedSampleHtml}" title="リニューアルイメージ" sandbox="allow-scripts" style="width:100%;border:none;min-height:80vh;display:block;"></iframe>
   </div>
 </div>`;
 

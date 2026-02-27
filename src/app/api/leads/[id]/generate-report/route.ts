@@ -164,6 +164,7 @@ export async function POST(
             recommendations,
             checks: checkItems,
             sampleUrl,
+            sampleHtml,
         });
 
         // ============================================
