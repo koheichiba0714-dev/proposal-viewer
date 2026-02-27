@@ -128,7 +128,6 @@ export default function LeadsPage() {
     const [emails, setEmails] = useState<Email[]>([]);
     const [events, setEvents] = useState<TrackingEvent[]>([]);
     const [analyzing, setAnalyzing] = useState(false);
-    const [creatingProposal, setCreatingProposal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [activeTab, setActiveTab] = useState('info');
     const [searchQuery, setSearchQuery] = useState('');
@@ -142,6 +141,8 @@ export default function LeadsPage() {
     const selectedRef = useRef<HTMLDivElement>(null);
 
     const selected = leads.find(l => l.id === selectedId) || null;
+    // Per-lead generation state: derived from report_progress in DB (polled)
+    const isGenerating = selected ? !!(selected.report_progress && !['完了', 'エラー', ''].includes(selected.report_progress)) : false;
     const currentIndex = selected ? leads.indexOf(selected) : -1;
 
     const loadLeads = useCallback(async () => {
@@ -222,7 +223,8 @@ export default function LeadsPage() {
 
     const handleCreateProposal = async () => {
         if (!selected || !analysis) return;
-        setCreatingProposal(true);
+        // Optimistically set progress locally so UI updates immediately
+        setLeads(prev => prev.map(l => l.id === selected.id ? { ...l, report_progress: 'LP生成中 (1/3)' } : l));
         try {
             const res = await fetch(`/api/leads/${selected.id}/generate-report`, {
                 method: 'POST',
@@ -237,7 +239,7 @@ export default function LeadsPage() {
                 loadDetail(selected.id);
             }
         } catch (e) { alert(`診断レポート生成に失敗しました: ${e instanceof Error ? e.message : e}`); }
-        finally { setCreatingProposal(false); await loadLeads(); }
+        finally { await loadLeads(); }
     };
 
     const handleStatusChange = async (status: string) => {
@@ -305,8 +307,8 @@ export default function LeadsPage() {
                     <>
                         <button className="toolbar-btn" onClick={() => { setEditMode(true); setEditForm({ ...selected }); }}>✏️ 編集</button>
                         {analysis && (
-                            <button className="toolbar-btn primary" onClick={handleCreateProposal} disabled={creatingProposal}>
-                                {creatingProposal ? '作成中...' : '📄 診断レポート生成'}
+                            <button className="toolbar-btn primary" onClick={handleCreateProposal} disabled={isGenerating}>
+                                {isGenerating ? `⏳ ${selected.report_progress}` : '📄 診断レポート生成'}
                             </button>
                         )}
 
@@ -578,8 +580,8 @@ export default function LeadsPage() {
                                                             </button>
                                                         )}
                                                         {analysis && (
-                                                            <button className="btn btn-sm btn-success" onClick={handleCreateProposal} disabled={creatingProposal}>
-                                                                {creatingProposal ? '作成中...' : '📄 診断レポート生成'}
+                                                            <button className="btn btn-sm btn-success" onClick={handleCreateProposal} disabled={isGenerating}>
+                                                                {isGenerating ? `⏳ ${selected?.report_progress}` : '📄 診断レポート生成'}
                                                             </button>
                                                         )}
 
@@ -812,8 +814,8 @@ export default function LeadsPage() {
                                                             <button className="btn btn-sm" onClick={handleAnalyze} disabled={analyzing}>
                                                                 {analyzing ? '⏳ 再分析中...' : '🔍 再分析'}
                                                             </button>
-                                                            <button className="btn btn-sm btn-success" onClick={handleCreateProposal} disabled={creatingProposal}>
-                                                                {creatingProposal ? '作成中...' : '📄 診断レポート生成'}
+                                                            <button className="btn btn-sm btn-success" onClick={handleCreateProposal} disabled={isGenerating}>
+                                                                {isGenerating ? `⏳ ${selected?.report_progress}` : '📄 診断レポート生成'}
                                                             </button>
                                                         </div>
                                                     </>
@@ -866,8 +868,8 @@ export default function LeadsPage() {
                                                     <div className="empty-icon">📄</div>
                                                     <p>診断レポートがまだありません</p>
                                                     {analysis && (
-                                                        <button className="btn btn-primary" onClick={handleCreateProposal} disabled={creatingProposal}>
-                                                            📄 診断レポート生成
+                                                        <button className="btn btn-primary" onClick={handleCreateProposal} disabled={isGenerating}>
+                                                            {isGenerating ? `⏳ ${selected?.report_progress}` : '📄 診断レポート生成'}
                                                         </button>
                                                     )}
                                                 </div>
