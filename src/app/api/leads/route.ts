@@ -8,14 +8,16 @@ export async function GET() {
       (SELECT COUNT(*) FROM tracking_events te WHERE te.lead_id = l.id AND te.event_type = 'email_open') as open_count,
       (SELECT COUNT(*) FROM tracking_events te WHERE te.lead_id = l.id AND te.event_type = 'proposal_view') as view_count
     FROM leads l
-    ORDER BY 
-      CASE l.status 
-        WHEN 'opened' THEN 1 WHEN 'clicked' THEN 2 WHEN 'proposal_sent' THEN 3
-        WHEN 'new' THEN 4 ELSE 5
-      END,
-      l.score DESC
+    ORDER BY l.id DESC
   `).all();
-  return NextResponse.json(leads);
+
+  // Gather unique industries and areas for filter dropdowns
+  const industries = (db.prepare("SELECT DISTINCT industry FROM leads WHERE industry != '' ORDER BY industry").all() as { industry: string }[])
+    .map(r => r.industry);
+  const areas = (db.prepare("SELECT DISTINCT area FROM leads WHERE area != '' ORDER BY area").all() as { area: string }[])
+    .map(r => r.area);
+
+  return NextResponse.json({ data: leads, meta: { industries, areas } });
 }
 
 export async function POST(request: NextRequest) {
