@@ -93,6 +93,10 @@ export default function ScrapePage() {
     const [running, setRunning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const [progress, setProgress] = useState('');
+    const [percentage, setPercentage] = useState(0);
+    const [totalCities, setTotalCities] = useState(0);
+    const [currentCity, setCurrentCity] = useState(0);
+    const [currentCityName, setCurrentCityName] = useState('');
     const [customCities, setCustomCities] = useState('');
     const logRef = useRef<HTMLDivElement>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -136,8 +140,15 @@ export default function ScrapePage() {
             const data = await res.json();
             setLogs(data.logs || []);
             setProgress(data.progress || '');
+            setPercentage(data.percentage || 0);
+            setTotalCities(data.totalCities || 0);
+            setCurrentCity(data.currentCity || 0);
+            setCurrentCityName(data.currentCityName || '');
             if (!data.running) {
                 setRunning(false);
+                if (data.logs && data.logs.length > 0) {
+                    setPercentage(100);
+                }
                 if (pollRef.current) {
                     clearInterval(pollRef.current);
                     pollRef.current = null;
@@ -372,16 +383,43 @@ export default function ScrapePage() {
                 {/* 進捗・ログ */}
                 {(running || logs.length > 0) && (
                     <div className="card">
-                        <div className="card-header">
-                            <h3>{running ? '⏳ 実行中' : '✅ 完了'}</h3>
-                            <span className="scrape-progress-text">{progress}</span>
+                        <div className="card-header" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3>{running ? '⏳ 実行中' : '✅ 完了'}</h3>
+                                <span style={{ fontWeight: 700, fontSize: 18, color: 'var(--primary)' }}>
+                                    {percentage}%
+                                </span>
+                            </div>
+                            {running && currentCityName && (
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    📍 {currentCityName} を処理中... ({currentCity}/{totalCities} エリア)
+                                </span>
+                            )}
+                            {!running && logs.length > 0 && (
+                                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                                    {progress}
+                                </span>
+                            )}
                         </div>
                         <div className="card-body" style={{ padding: 0 }}>
-                            {running && (
-                                <div className="scrape-progress-bar">
-                                    <div className="scrape-progress-bar-fill" />
-                                </div>
-                            )}
+                            {/* プログレスバー */}
+                            <div style={{
+                                height: 8,
+                                background: 'var(--border-color, #e5e7eb)',
+                                borderRadius: 4,
+                                margin: '0 16px 8px',
+                                overflow: 'hidden',
+                            }}>
+                                <div style={{
+                                    height: '100%',
+                                    width: `${percentage}%`,
+                                    background: running
+                                        ? 'linear-gradient(90deg, var(--primary), #818cf8)'
+                                        : '#22c55e',
+                                    borderRadius: 4,
+                                    transition: 'width 0.5s ease-out',
+                                }} />
+                            </div>
                             <div className="scrape-log" ref={logRef}>
                                 {logs.map((log, i) => (
                                     <div key={i} className={`scrape-log-line ${log.startsWith('✅') ? 'success' : log.startsWith('❌') || log.startsWith('✖') ? 'error' : ''}`}>

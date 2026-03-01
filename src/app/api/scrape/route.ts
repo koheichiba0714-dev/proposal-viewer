@@ -25,9 +25,35 @@ let currentScrape: {
     logs: string[];
     progress: string;
     startedAt: number;
-} = { running: false, logs: [], progress: '', startedAt: 0 };
+    percentage: number;
+    totalCities: number;
+    currentCity: number;
+    currentCityName: string;
+} = { running: false, logs: [], progress: '', startedAt: 0, percentage: 0, totalCities: 0, currentCity: 0, currentCityName: '' };
 
 const MAX_RUN_MS = 30 * 60 * 1000; // 30分タイムアウト
+
+// Parse progress from stderr log lines
+function parseProgress(line: string) {
+    // Pattern: 🔎 [1/5] 検索: 奈良市　リノベーション業者
+    const cityMatch = line.match(/\[(\d+)\/(\d+)\]\s*検索:\s*(.+)/);
+    if (cityMatch) {
+        currentScrape.currentCity = parseInt(cityMatch[1]);
+        currentScrape.totalCities = parseInt(cityMatch[2]);
+        currentScrape.currentCityName = cityMatch[3].split('　')[0].trim();
+        // Base percentage from city progress (each city = equal slice)
+        currentScrape.percentage = Math.round(((currentScrape.currentCity - 1) / currentScrape.totalCities) * 100);
+    }
+    // Pattern: ✅ 奈良市: 10 件取得完了
+    const doneMatch = line.match(/✅\s*(.+?):\s*\d+\s*件取得完了/);
+    if (doneMatch && currentScrape.totalCities > 0) {
+        currentScrape.percentage = Math.round((currentScrape.currentCity / currentScrape.totalCities) * 100);
+    }
+    // Pattern: 🔚 完了
+    if (line.includes('🔚 完了') || line.includes('✅ 完了')) {
+        currentScrape.percentage = 100;
+    }
+}
 
 export function getScrapeStatus() {
     // 30分超えたら自動解放
@@ -35,8 +61,12 @@ export function getScrapeStatus() {
         currentScrape.running = false;
         currentScrape.logs.push('⚠️ 30分超過のため自動停止しました');
         currentScrape.progress = 'タイムアウト停止';
+        currentScrape.percentage = 0;
     }
-    return { ...currentScrape, logs: [...currentScrape.logs.slice(-50)] };
+    return {
+        ...currentScrape,
+        logs: [...currentScrape.logs.slice(-50)],
+    };
 }
 
 export async function POST(request: NextRequest) {
@@ -52,7 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Start scraping in background
-    currentScrape = { running: true, logs: [], progress: '開始中...', startedAt: Date.now() };
+    currentScrape = { running: true, logs: [], progress: '開始中...', startedAt: Date.now(), percentage: 0, totalCities: cities.length, currentCity: 0, currentCityName: '' };
 
     const scriptPath = path.join(process.cwd(), 'scripts', 'scraper.py');
 
@@ -87,6 +117,7 @@ export async function POST(request: NextRequest) {
         for (const line of lines) {
             currentScrape.logs.push(line);
             currentScrape.progress = line;
+            parseProgress(line);
         }
     });
 
@@ -179,6 +210,6 @@ export async function POST(request: NextRequest) {
 
 // DELETE: ステータスリセット（ロック解除）
 export async function DELETE() {
-    currentScrape = { running: false, logs: [], progress: '', startedAt: 0 };
+    currentScrape = { running: false, logs: [], progress: '', startedAt: 0, percentage: 0, totalCities: 0, currentCity: 0, currentCityName: '' };
     return NextResponse.json({ message: 'スクレイピングステータスをリセットしました' });
 }
