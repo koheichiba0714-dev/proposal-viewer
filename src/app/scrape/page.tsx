@@ -161,6 +161,17 @@ export default function ScrapePage() {
         }
     }, [logs]);
 
+    // 強制リセット
+    const resetScrape = async () => {
+        if (!confirm('スクレイピングの実行状態をリセットしますか？\n（前回の実行がロック状態の場合に使用してください）')) return;
+        try {
+            await fetch('/api/scrape', { method: 'DELETE' });
+            setRunning(false);
+            setLogs([]);
+            setProgress('');
+        } catch { /* ignore */ }
+    };
+
     // スクレイピング開始
     const startScrape = async () => {
         // カスタム都市を追加
@@ -187,6 +198,19 @@ export default function ScrapePage() {
             });
             const data = await res.json();
             if (!res.ok) {
+                if (res.status === 409) {
+                    // 自動リセットを試みる
+                    const resetOk = confirm('前回のスクレイピングがロック中です。リセットして再実行しますか？');
+                    if (resetOk) {
+                        await fetch('/api/scrape', { method: 'DELETE' });
+                        setRunning(false);
+                        setLogs(['🔄 ロック解除しました。もう一度開始ボタンを押してください。']);
+                        setProgress('リセット完了');
+                    } else {
+                        setRunning(false);
+                    }
+                    return;
+                }
                 alert(data.error || 'エラーが発生しました');
                 setRunning(false);
                 return;
@@ -324,13 +348,24 @@ export default function ScrapePage() {
                         </div>
 
                         {/* 実行ボタン */}
-                        <button
-                            className={`btn btn-primary scrape-start-btn ${running ? 'disabled' : ''}`}
-                            onClick={startScrape}
-                            disabled={running}
-                        >
-                            {running ? '⏳ スクレイピング実行中...' : '🚀 スクレイピング開始'}
-                        </button>
+                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                            <button
+                                className={`btn btn-primary scrape-start-btn ${running ? 'disabled' : ''}`}
+                                onClick={startScrape}
+                                disabled={running}
+                                style={{ flex: 1 }}
+                            >
+                                {running ? '⏳ スクレイピング実行中...' : '🚀 スクレイピング開始'}
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={resetScrape}
+                                style={{ fontSize: 12 }}
+                                title="前回の実行がロック状態の場合に使用"
+                            >
+                                🔄 リセット
+                            </button>
+                        </div>
                     </div>
                 </div>
 

@@ -27,7 +27,15 @@ let currentScrape: {
     startedAt: number;
 } = { running: false, logs: [], progress: '', startedAt: 0 };
 
+const MAX_RUN_MS = 30 * 60 * 1000; // 30分タイムアウト
+
 export function getScrapeStatus() {
+    // 30分超えたら自動解放
+    if (currentScrape.running && currentScrape.startedAt > 0 && (Date.now() - currentScrape.startedAt > MAX_RUN_MS)) {
+        currentScrape.running = false;
+        currentScrape.logs.push('⚠️ 30分超過のため自動停止しました');
+        currentScrape.progress = 'タイムアウト停止';
+    }
     return { ...currentScrape, logs: [...currentScrape.logs.slice(-50)] };
 }
 
@@ -167,4 +175,10 @@ export async function POST(request: NextRequest) {
         keyword,
         cities: cities.length,
     });
+}
+
+// DELETE: ステータスリセット（ロック解除）
+export async function DELETE() {
+    currentScrape = { running: false, logs: [], progress: '', startedAt: 0 };
+    return NextResponse.json({ message: 'スクレイピングステータスをリセットしました' });
 }

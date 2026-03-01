@@ -7,6 +7,19 @@ interface Lead {
     phone: string; email: string; website_url: string; score: number;
     status: string; notes: string; open_count: number; view_count: number;
     report_progress: string; created_at: string;
+    sns_urls?: string;
+}
+
+function parseSnsUrls(sns: string | undefined) {
+    if (!sns) return { instagram: '', facebook: '' };
+    const urls = sns.split(/\s+/).filter(Boolean);
+    let instagram = '', facebook = '';
+    for (const u of urls) {
+        const low = u.toLowerCase();
+        if (low.includes('instagram.com')) instagram = u;
+        else if (low.includes('facebook.com')) facebook = u;
+    }
+    return { instagram, facebook };
 }
 
 interface Analysis {
@@ -763,6 +776,7 @@ export default function LeadsPage() {
                             <th onClick={() => handleSort('industry')}>業種 <SortIcon col="industry" /></th>
                             <th onClick={() => handleSort('area')}>エリア <SortIcon col="area" /></th>
                             <th onClick={() => handleSort('score')}>スコア <SortIcon col="score" /></th>
+                            <th>SNS</th>
                             <th>温度</th>
                             <th onClick={() => handleSort('status')}>ステータス <SortIcon col="status" /></th>
                             <th onClick={() => handleSort('created_at')}>登録日 <SortIcon col="created_at" /></th>
@@ -770,6 +784,7 @@ export default function LeadsPage() {
                         <tbody>
                             {visibleLeads.map(lead => {
                                 const heatLevel = (lead.open_count > 0 ? 1 : 0) + (lead.view_count > 0 ? 1 : 0) + (lead.status === 'appointed' ? 1 : lead.status === 'called' ? 1 : 0);
+                                const sns = parseSnsUrls(lead.sns_urls);
                                 return (
                                     <tr key={lead.id}
                                         data-status={lead.status}
@@ -797,6 +812,16 @@ export default function LeadsPage() {
                                                     </div>
                                                 </div>
                                             ) : '-'}
+                                        </td>
+                                        <td onClick={e => e.stopPropagation()}>
+                                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                                {sns.instagram ? (
+                                                    <a href={sns.instagram} target="_blank" rel="noopener" title="Instagram" style={{ color: '#E1306C', fontSize: 16, lineHeight: 1 }}>📸</a>
+                                                ) : <span style={{ opacity: 0.2, fontSize: 14 }}>📸</span>}
+                                                {sns.facebook ? (
+                                                    <a href={sns.facebook} target="_blank" rel="noopener" title="Facebook" style={{ color: '#1877F2', fontSize: 16, lineHeight: 1 }}>📘</a>
+                                                ) : <span style={{ opacity: 0.2, fontSize: 14 }}>📘</span>}
+                                            </div>
                                         </td>
                                         <td><div className="temp-icons" title={`メール開封${lead.open_count}回 / レポート閲覧${lead.view_count}回`}>
                                             {heatLevel === 0 && <span style={{ opacity: 0.3, fontSize: 12 }}>―</span>}
