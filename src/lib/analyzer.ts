@@ -69,6 +69,11 @@ export interface AnalysisResult {
     recommendations: string[];
     score: number;
     category_scores: CategoryScores;
+
+    // === 自動抽出 ===
+    instagram_url: string;
+    facebook_url: string;
+    extracted_emails: string[];
 }
 
 export interface CategoryScores {
@@ -137,6 +142,9 @@ export async function analyzeSite(url: string): Promise<AnalysisResult> {
         recommendations: [],
         score: 0,
         category_scores: { seo: 0, ux: 0, marketing: 0, security: 0, accessibility: 0 },
+        instagram_url: '',
+        facebook_url: '',
+        extracted_emails: [],
     };
 
     try {
@@ -417,10 +425,46 @@ export async function analyzeSite(url: string): Promise<AnalysisResult> {
             /instagram\.com/i, /line\.me/i, /youtube\.com/i, /tiktok\.com/i,
         ];
         result.has_sns_links = snsPatterns.some(p => p.test(html));
+
+        // ★ Instagram URL抽出（正規表現で自社サイトHTMLからぶっこ抜く）
+        const igMatches = html.match(/https?:\/\/(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/gi) || [];
+        if (igMatches.length > 0) {
+            // 重複排除してユニークなInstagram URLのみ取得
+            const unique = [...new Set(igMatches.map(u => u.replace(/^http:/, 'https:').replace(/\/$/, '')))]
+                .filter(u => !/(explore|p|reel|stories|accounts|about|developer|legal|press)/i.test(u.split('/').pop() || ''));
+            if (unique.length > 0) {
+                result.instagram_url = unique[0];
+            }
+        }
+
+        // ★ Facebook URL抽出（正規表現で自社サイトHTMLから抽出）
+        const fbMatches = html.match(/https?:\/\/(?:www\.)?facebook\.com\/([a-zA-Z0-9_.]+)/gi) || [];
+        if (fbMatches.length > 0) {
+            const uniqueFb = [...new Set(fbMatches.map(u => u.replace(/^http:/, 'https:').replace(/\/$/, '')))]
+                .filter(u => !/(sharer|share|dialog|plugins|login|groups|events|marketplace|watch|gaming|tr)/i.test(u.split('/').pop() || ''));
+            if (uniqueFb.length > 0) {
+                result.facebook_url = uniqueFb[0];
+            }
+        }
+
+        // ★ メールアドレス抽出（正規表現でHTMLからぶっこ抜く）
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const rawEmails = html.match(emailRegex) || [];
+        // フィルタ: 画像ファイル名・CSSセレクタ等を除外
+        result.extracted_emails = [...new Set(rawEmails)]
+            .filter(e => !/(\.(png|jpg|gif|svg|css|js|woff|ico)$|example\.com|sentry|webpack|schema\.org)/i.test(e))
+            .slice(0, 5); // 最大5件
+
         if (result.has_sns_links) {
             result.praises.push('📣 Instagram・LINE・YouTubeなどのSNSアカウントとリンクされており、集客の入口が広がっています');
         } else {
             result.issues.push('⚠️ SNSアカウントへのリンクがありません。今の時代、ホームページだけでは新規のお客様は集まりにくくなっています');
+            if (!result.instagram_url) {
+                result.issues.push('📸 Instagramアカウントが見つかりません。同業他社はInstagramで施工事例や採用情報を発信し、若い世代のお客様や求職者を獲得しています');
+            }
+        }
+        if (result.instagram_url) {
+            result.praises.push(`📸 Instagramアカウントが連携されています（${result.instagram_url}）`);
         }
 
         // 16. アクセス解析 (8点)

@@ -34,11 +34,14 @@ interface Analysis {
     recommendations: string | string[]; score: number;
     category_scores: string | { seo: number; ux: number; marketing: number; security: number; accessibility: number };
     analyzed_at: string;
+    instagram_url?: string;
+    facebook_url?: string;
+    extracted_emails?: string;
 }
 
 interface Proposal { id: number; token: string; title: string; created_at: string; }
 interface Email { id: number; subject: string; status: string; sent_at: string; created_at: string; }
-interface TrackingEvent { event_type: string; created_at: string; }
+interface TrackingEvent { event_type: string; created_at: string; duration_seconds?: number; }
 
 function parseIssues(issues: string | string[] | undefined | null): string[] {
     if (!issues) return [];
@@ -94,6 +97,12 @@ export default function LeadsPage() {
     const [activeTab, setActiveTab] = useState('info');
     const [editMode, setEditMode] = useState(false);
     const [editForm, setEditForm] = useState<Partial<Lead>>({});
+
+    // Email compose
+    const [emailCompose, setEmailCompose] = useState<{ subject: string; bodyHtml: string; proposalUrl: string } | null>(null);
+    const [emailGenerating, setEmailGenerating] = useState(false);
+    const [emailSending, setEmailSending] = useState(false);
+    const [emailPreview, setEmailPreview] = useState(false);
 
     // Filters
     const [searchQuery, setSearchQuery] = useState('');
@@ -410,11 +419,46 @@ export default function LeadsPage() {
                     <div className="fm-field"><span className="fm-field-label">メール</span><div className="fm-field-value">{selected.email ? <a href={`mailto:${selected.email}`}>{selected.email}</a> : '-'}</div></div>
                     <div className="fm-field fm-field-full"><span className="fm-field-label">URL</span><div className="fm-field-value">{selected.website_url ? <a href={selected.website_url} target="_blank" rel="noopener">{selected.website_url}</a> : '-'}</div></div>
                 </div>
+                {analysis && (analysis.instagram_url || analysis.facebook_url || analysis.extracted_emails) && (() => {
+                    let extractedEmails: string[] = [];
+                    if (analysis.extracted_emails) {
+                        try { extractedEmails = JSON.parse(analysis.extracted_emails); } catch { extractedEmails = []; }
+                    }
+                    return (analysis.instagram_url || analysis.facebook_url || extractedEmails.length > 0) ? (
+                        <div className="fm-portal" style={{ marginTop: 8 }}>
+                            <div className="fm-portal-header"><span>📱 SNS・連絡先（自動抽出）</span></div>
+                            <div className="fm-portal-body" style={{ padding: '8px 12px' }}>
+                                {analysis.instagram_url && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12 }}>
+                                        <span>📸</span>
+                                        <span style={{ fontWeight: 600, minWidth: 70 }}>Instagram</span>
+                                        <a href={analysis.instagram_url} target="_blank" rel="noopener" style={{ color: '#E1306C' }}>{analysis.instagram_url.replace(/https?:\/\/(www\.)?/, '')}</a>
+                                    </div>
+                                )}
+                                {analysis.facebook_url && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12 }}>
+                                        <span>📘</span>
+                                        <span style={{ fontWeight: 600, minWidth: 70 }}>Facebook</span>
+                                        <a href={analysis.facebook_url} target="_blank" rel="noopener" style={{ color: '#1877F2' }}>{analysis.facebook_url.replace(/https?:\/\/(www\.)?/, '')}</a>
+                                    </div>
+                                )}
+                                {extractedEmails.length > 0 && extractedEmails.map((em, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', fontSize: 12 }}>
+                                        <span>✉️</span>
+                                        <span style={{ fontWeight: 600, minWidth: 70 }}>メール</span>
+                                        <a href={`mailto:${em}`}>{em}</a>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null;
+                })()}
                 {selected.notes && <div style={{ marginTop: 8 }}><div className="fm-field fm-field-full"><span className="fm-field-label">メモ</span><div className="fm-field-value" style={{ whiteSpace: 'pre-wrap' }}>{selected.notes}</div></div></div>}
                 <div style={{ display: 'flex', gap: 4, marginTop: 12, flexWrap: 'wrap' }}>
                     <button className="btn btn-sm" onClick={() => { setEditMode(true); setEditForm({ ...selected }); }}>✏️ 編集</button>
                     {selected.website_url && <button className="btn btn-sm btn-primary" onClick={handleAnalyze} disabled={analyzing}>{analyzing ? '⏳ 分析中...' : '🔍 サイト分析'}</button>}
                     {analysis && <button className="btn btn-sm btn-success" onClick={handleCreateProposal} disabled={isGenerating}>{isGenerating ? `⏳ ${selected?.report_progress}` : '📄 診断レポート生成'}</button>}
+                    {proposals.length > 0 && selected.email && <button className="btn btn-sm" style={{ background: '#7c3aed', color: '#fff' }} onClick={() => { setActiveTab('emails'); handleGenerateEmail(); }}>✉️ メール送信</button>}
                 </div>
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                     <div className="fm-action-stat" style={{ flex: 1 }}><div className="value">{selected.open_count || 0}</div><div className="label">メール開封</div></div>
@@ -517,19 +561,121 @@ export default function LeadsPage() {
         );
     };
 
+    const handleGenerateEmail = async () => {
+        if (!selected) return;
+        setEmailGenerating(true);
+        setEmailCompose(null);
+        try {
+            const res = await fetch(`/api/leads/${selected.id}/generate-email`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setEmailCompose({ subject: data.subject, bodyHtml: data.body_html, proposalUrl: data.proposal_url });
+            setEmailPreview(true);
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : 'セールスレター生成に失敗しました', 'error');
+        } finally {
+            setEmailGenerating(false);
+        }
+    };
+
+    const handleSendEmailDirect = async () => {
+        if (!selected || !emailCompose) return;
+        if (!selected.email) { showToast('メールアドレスが登録されていません', 'error'); return; }
+        if (!confirm(`${selected.company_name} (${selected.email}) にメールを送信します。よろしいですか？`)) return;
+        setEmailSending(true);
+        try {
+            // Create draft
+            const draftRes = await fetch('/api/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', lead_id: selected.id, proposal_id: proposals[0]?.id, subject: emailCompose.subject, body_html: emailCompose.bodyHtml }),
+            });
+            const draftData = await draftRes.json();
+            if (!draftRes.ok) throw new Error(draftData.error || 'メール作成に失敗');
+            // Send
+            const sendRes = await fetch('/api/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'send', email_id: draftData.id || draftData.email_id }),
+            });
+            const sendData = await sendRes.json();
+            if (!sendRes.ok) throw new Error(sendData.error || '送信に失敗');
+            showToast(`✅ ${selected.company_name} にメール送信しました`);
+            setEmailCompose(null);
+            setEmailPreview(false);
+            loadDetail(selected.id);
+            loadLeads();
+        } catch (err) {
+            showToast(err instanceof Error ? err.message : '送信に失敗しました', 'error');
+        } finally {
+            setEmailSending(false);
+        }
+    };
+
     const renderEmailsTab = () => {
         if (!selected) return null;
-        if (emails.length === 0) return <div className="empty-state"><div className="empty-icon">✉️</div><p>メール送信履歴がありません</p></div>;
         return (
-            <div className="fm-portal"><div className="fm-portal-header"><span>✉️ メール履歴</span><span>{emails.length} 件</span></div><div className="fm-portal-body">
-                {emails.map(em => (
-                    <div key={em.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border-light)', fontSize: 12 }}>
-                        <span className={`badge badge-${em.status}`}>{em.status === 'draft' ? '下書き' : em.status === 'approved' ? '承認済' : '送信済'}</span>
-                        <div style={{ flex: 1 }}>{em.subject}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(em.created_at).toLocaleDateString('ja-JP')}</div>
+            <>
+                {/* セールスレター生成エリア */}
+                <div className="fm-portal" style={{ marginBottom: 12 }}>
+                    <div className="fm-portal-header"><span>✨ セールスレター</span></div>
+                    <div className="fm-portal-body" style={{ padding: 12 }}>
+                        {!emailCompose && !emailGenerating && (
+                            <div style={{ textAlign: 'center' }}>
+                                {proposals.length > 0 ? (
+                                    <>
+                                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>AIが診断結果を基にパーソナライズされたセールスレターを自動生成します</p>
+                                        <button className="btn btn-primary" onClick={handleGenerateEmail} disabled={!selected.email}>
+                                            {selected.email ? '🤖 セールスレターを自動生成' : '⚠️ メールアドレス未登録'}
+                                        </button>
+                                    </>
+                                ) : (
+                                    <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>先に診断レポートを生成してください</p>
+                                )}
+                            </div>
+                        )}
+                        {emailGenerating && (
+                            <div style={{ textAlign: 'center', padding: 20 }}>
+                                <div style={{ width: 32, height: 32, border: '3px solid #e0e0e0', borderTop: '3px solid #7c3aed', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>AIがセールスレターを生成中...</p>
+                            </div>
+                        )}
+                        {emailCompose && emailPreview && (
+                            <div>
+                                <div style={{ marginBottom: 8 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>件名</label>
+                                    <input type="text" value={emailCompose.subject} onChange={e => setEmailCompose({ ...emailCompose, subject: e.target.value })} style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--border-light)', borderRadius: 4, fontSize: 13, marginTop: 2 }} />
+                                </div>
+                                <div style={{ marginBottom: 8 }}>
+                                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>本文プレビュー</label>
+                                    <div style={{ border: '1px solid var(--border-light)', borderRadius: 4, padding: 12, maxHeight: 300, overflow: 'auto', background: '#fff', marginTop: 2 }}>
+                                        <div dangerouslySetInnerHTML={{ __html: emailCompose.bodyHtml }} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                    <button className="btn btn-sm" onClick={() => { setEmailCompose(null); setEmailPreview(false); }}>キャンセル</button>
+                                    <button className="btn btn-sm" onClick={handleGenerateEmail} disabled={emailGenerating}>🔄 再生成</button>
+                                    <button className="btn btn-sm" style={{ background: '#7c3aed', color: '#fff' }} onClick={handleSendEmailDirect} disabled={emailSending}>
+                                        {emailSending ? '⏳ 送信中...' : '📨 この内容で送信'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                ))}
-            </div></div>
+                </div>
+                {/* メール送信履歴 */}
+                {emails.length > 0 && (
+                    <div className="fm-portal"><div className="fm-portal-header"><span>✉️ メール履歴</span><span>{emails.length} 件</span></div><div className="fm-portal-body">
+                        {emails.map(em => (
+                            <div key={em.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderBottom: '1px solid var(--border-light)', fontSize: 12 }}>
+                                <span className={`badge badge-${em.status}`}>{em.status === 'draft' ? '下書き' : em.status === 'approved' ? '承認済' : '送信済'}</span>
+                                <div style={{ flex: 1 }}>{em.subject}</div>
+                                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(em.created_at).toLocaleDateString('ja-JP')}</div>
+                            </div>
+                        ))}
+                    </div></div>
+                )}
+            </>
         );
     };
 
@@ -541,15 +687,23 @@ export default function LeadsPage() {
                     <div className="fm-field"><span className="fm-field-label">登録日</span><div className="fm-field-value">{new Date(selected.created_at).toLocaleString('ja-JP')}</div></div>
                     <div className="fm-field"><span className="fm-field-label">ステータス</span><div className="fm-field-value"><span className={`badge badge-${selected.status}`}>{STATUS_LABELS[selected.status]}</span></div></div>
                 </div>
-                {events.length > 0 ? (
-                    <div className="fm-portal"><div className="fm-portal-header"><span>📊 アクティビティ</span><span>{events.length} 件</span></div><div className="fm-portal-body">
-                        {events.map((ev, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: '1px solid var(--border-light)', fontSize: 11 }}>
-                                <span>{ev.event_type === 'email_open' ? '📩' : ev.event_type === 'proposal_view' ? '👀' : '🔗'}</span>
-                                <div style={{ flex: 1 }}>{ev.event_type === 'email_open' ? 'メール開封' : ev.event_type === 'proposal_view' ? 'レポート閲覧' : 'リンククリック'}</div>
-                                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(ev.created_at).toLocaleString('ja-JP')}</div>
-                            </div>
-                        ))}
+                {events.filter(ev => ev.event_type !== 'duration_update').length > 0 ? (
+                    <div className="fm-portal"><div className="fm-portal-header"><span>📊 アクティビティ</span><span>{events.filter(ev => ev.event_type !== 'duration_update').length} 件</span></div><div className="fm-portal-body">
+                        {events.filter(ev => ev.event_type !== 'duration_update').map((ev, i) => {
+                            const fmtDuration = (s: number) => { if (s < 60) return `${s}秒`; return `${Math.floor(s / 60)}分${s % 60}秒`; };
+                            return (
+                                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: '1px solid var(--border-light)', fontSize: 11 }}>
+                                    <span>{ev.event_type === 'email_open' ? '📩' : ev.event_type === 'proposal_view' ? '👀' : '🔗'}</span>
+                                    <div style={{ flex: 1 }}>
+                                        {ev.event_type === 'email_open' ? 'メール開封' : ev.event_type === 'proposal_view' ? 'レポート閲覧' : 'リンククリック'}
+                                        {ev.event_type === 'proposal_view' && ev.duration_seconds && ev.duration_seconds > 0 && (
+                                            <span style={{ marginLeft: 6, color: '#7c3aed', fontWeight: 600 }}>⏱ {fmtDuration(ev.duration_seconds)}</span>
+                                        )}
+                                    </div>
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{new Date(ev.created_at).toLocaleString('ja-JP')}</div>
+                                </div>
+                            );
+                        })}
                     </div></div>
                 ) : <div className="empty-state"><div className="empty-icon">📊</div><p>アクティビティ履歴がまだありません</p></div>}
             </>
@@ -614,36 +768,51 @@ export default function LeadsPage() {
                             <th onClick={() => handleSort('created_at')}>登録日 <SortIcon col="created_at" /></th>
                         </tr></thead>
                         <tbody>
-                            {visibleLeads.map(lead => (
-                                <tr key={lead.id}
-                                    className={`${selectedId === lead.id ? 'selected' : ''} ${checkedIds.has(lead.id) ? 'checked' : ''}`}
-                                    onClick={() => { setSelectedId(lead.id); loadDetail(lead.id); }}>
-                                    <td onClick={e => e.stopPropagation()}>
-                                        <input type="checkbox" checked={checkedIds.has(lead.id)} onChange={() => toggleCheck(lead.id)} />
-                                    </td>
-                                    <td className="company-cell">
-                                        {lead.company_name}
-                                        {lead.report_progress && !['完了', ''].includes(lead.report_progress) && (
-                                            <span className={`progress-badge ${lead.report_progress === 'エラー' ? 'error' : ''}`}>
-                                                {lead.report_progress === 'エラー' ? '⚠️ エラー' : `⏳ ${lead.report_progress}`}
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td>{lead.industry || '-'}</td>
-                                    <td>{lead.area || '-'}</td>
-                                    <td className={`score-cell ${getScoreClass(lead.score)}`}>{lead.score > 0 ? lead.score : '-'}</td>
-                                    <td><div className="temp-icons">
-                                        {lead.open_count > 0 && <span title={`メール開封 ${lead.open_count}回`}>✉️</span>}
-                                        {lead.view_count > 0 && <span title={`レポート閲覧 ${lead.view_count}回`}>👀</span>}
-                                    </div></td>
-                                    <td><span className={`badge badge-${lead.status}`}>{STATUS_LABELS[lead.status]}</span></td>
-                                    <td style={{ fontSize: 10, color: 'var(--text-muted)' }}>{lead.created_at ? new Date(lead.created_at).toLocaleDateString('ja-JP') : '-'}</td>
-                                </tr>
-                            ))}
+                            {visibleLeads.map(lead => {
+                                const heatLevel = (lead.open_count > 0 ? 1 : 0) + (lead.view_count > 0 ? 1 : 0) + (lead.status === 'appointed' ? 1 : lead.status === 'called' ? 1 : 0);
+                                return (
+                                    <tr key={lead.id}
+                                        data-status={lead.status}
+                                        className={`${selectedId === lead.id ? 'selected' : ''} ${checkedIds.has(lead.id) ? 'checked' : ''}`}
+                                        onClick={() => { setSelectedId(lead.id); loadDetail(lead.id); }}>
+                                        <td onClick={e => e.stopPropagation()}>
+                                            <input type="checkbox" checked={checkedIds.has(lead.id)} onChange={() => toggleCheck(lead.id)} />
+                                        </td>
+                                        <td className="company-cell">
+                                            {lead.company_name}
+                                            {lead.report_progress && !['完了', ''].includes(lead.report_progress) && (
+                                                <span className={`progress-badge ${lead.report_progress === 'エラー' ? 'error' : ''}`}>
+                                                    {lead.report_progress === 'エラー' ? '⚠️ エラー' : `⏳ ${lead.report_progress}`}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td>{lead.industry || '-'}</td>
+                                        <td>{lead.area || '-'}</td>
+                                        <td className={`score-cell ${getScoreClass(lead.score)}`}>
+                                            {lead.score > 0 ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span>{lead.score}</span>
+                                                    <div className="score-bar" style={{ width: 60, height: 5 }}>
+                                                        <div className={`score-bar-fill ${getScoreClass(lead.score).replace('score-', 'fill-')}`} style={{ width: `${lead.score}%` }} />
+                                                    </div>
+                                                </div>
+                                            ) : '-'}
+                                        </td>
+                                        <td><div className="temp-icons" title={`メール開封${lead.open_count}回 / レポート閲覧${lead.view_count}回`}>
+                                            {heatLevel === 0 && <span style={{ opacity: 0.3, fontSize: 12 }}>―</span>}
+                                            {heatLevel >= 1 && <span>🔥</span>}
+                                            {heatLevel >= 2 && <span>🔥</span>}
+                                            {heatLevel >= 3 && <span>🔥</span>}
+                                        </div></td>
+                                        <td><span className={`badge badge-${lead.status}`}>{STATUS_LABELS[lead.status]}</span></td>
+                                        <td style={{ fontSize: 11, color: 'var(--text-muted)' }}>{lead.created_at ? new Date(lead.created_at).toLocaleDateString('ja-JP') : '-'}</td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
-                    {hasMore && <div style={{ padding: '10px 0', textAlign: 'center', cursor: 'pointer', color: 'var(--accent)', fontSize: 12, fontWeight: 600, borderTop: '1px solid var(--border-light)' }} onClick={() => setVisibleCount(v => v + ITEMS_PER_PAGE)}>さらに{Math.min(ITEMS_PER_PAGE, filteredLeads.length - visibleCount)}件を表示</div>}
-                    {filteredLeads.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{hasFilters ? '条件に一致するリードがありません' : 'リードがありません'}</div>}
+                    {hasMore && <div style={{ padding: '12px 0', textAlign: 'center', cursor: 'pointer', color: 'var(--accent)', fontSize: 13, fontWeight: 600, borderTop: '1px solid var(--border-light)' }} onClick={() => setVisibleCount(v => v + ITEMS_PER_PAGE)}>さらに{Math.min(ITEMS_PER_PAGE, filteredLeads.length - visibleCount)}件を表示</div>}
+                    {filteredLeads.length === 0 && <div className="empty-state"><div className="empty-icon">🏢</div><p>{hasFilters ? '条件に一致するリードがありません' : 'リードがまだありません'}</p><p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Googleマップ収集やCSVインポートでリードを追加しましょう</p></div>}
                 </div>
             </div>
 

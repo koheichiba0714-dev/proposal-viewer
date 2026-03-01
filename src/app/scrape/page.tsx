@@ -202,7 +202,7 @@ export default function ScrapePage() {
     return (
         <div>
             <div className="toolbar">
-                <span style={{ fontWeight: 600, fontSize: 13 }}>🗺️ Googleマップ収集</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>🗺️ Googleマップ収集</span>
                 <div className="toolbar-divider" />
                 <span className="toolbar-label">Googleマップからリード候補を自動収集</span>
             </div>

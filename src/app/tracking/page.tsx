@@ -69,7 +69,7 @@ export default function TrackingPage() {
     return (
         <div>
             <div className="toolbar">
-                <span style={{ fontWeight: 600, fontSize: 13 }}>📈 計測・架電リスト</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>📈 計測・架電リスト</span>
                 <div className="toolbar-divider" />
                 <span className="toolbar-label">リアルタイム追跡 (10秒自動更新)</span>
                 <div style={{ flex: 1 }} />

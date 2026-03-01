@@ -115,15 +115,23 @@ export default function EmailsPage() {
     };
 
     const handleSend = async (emailId: number) => {
-        if (!confirm('このメールを送信しますか？（プロトタイプモードでは実際には送信されません）')) return;
-        const res = await fetch('/api/emails', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'send', email_id: emailId }),
-        });
-        const data = await res.json();
-        alert(data.message);
-        loadData();
+        if (!confirm('このメールを実際に送信しますか？\n※ Resend API 経由で相手のメールアドレスに届きます')) return;
+        try {
+            const res = await fetch('/api/emails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'send', email_id: emailId }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(`❌ 送信失敗: ${data.error}`);
+                return;
+            }
+            alert(`✅ ${data.message}`);
+            loadData();
+        } catch {
+            alert('❌ 通信エラーが発生しました');
+        }
     };
 
     const handlePreview = (email: Email) => {
@@ -136,7 +144,7 @@ export default function EmailsPage() {
     return (
         <div>
             <div className="toolbar">
-                <span style={{ fontWeight: 600, fontSize: 13 }}>✉️ メール管理</span>
+                <span style={{ fontWeight: 700, fontSize: 14 }}>✉️ メール管理</span>
                 <div className="toolbar-divider" />
                 <span className="toolbar-label">提案メールの作成・承認・送信</span>
                 <div style={{ flex: 1 }} />
@@ -148,9 +156,16 @@ export default function EmailsPage() {
                     <div className="card">
                         <div className="card-body">
                             <div className="empty-state">
-                                <div className="empty-icon">✉️</div>
-                                <p>メールがありません。リードを分析→提案LP生成した後、メールを作成してください。</p>
-                                <button className="btn btn-primary" onClick={() => setShowCompose(true)}>✉️ メール作成</button>
+                                <div className="empty-icon">📮</div>
+                                <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>メールはまだありません</p>
+                                <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 400, margin: '0 auto 20px', lineHeight: 1.6 }}>
+                                    リード管理画面で企業を選択 →「メール」タブからAIで営業メールを自動生成できます。<br />
+                                    または、下のボタンから直接作成できます。
+                                </p>
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                                    <button className="btn btn-primary" onClick={() => setShowCompose(true)}>✉️ メール作成</button>
+                                    <a href="/leads" className="btn">🏢 リード管理へ</a>
+                                </div>
                             </div>
                         </div>
                     </div>

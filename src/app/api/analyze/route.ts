@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       'has_security_headers', 'has_hsts', 'has_x_content_type', 'has_mixed_content', 'has_sri', 'last_updated_text', 'cms_type',
       'has_lang_attr', 'heading_structure_ok', 'has_aria', 'has_skip_link',
       'praises', 'issues', 'recommendations', 'score', 'category_scores', 'raw_data',
+      'instagram_url', 'facebook_url', 'extracted_emails',
     ];
 
     const values = [
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
       // Aggregates
       JSON.stringify(result.praises), JSON.stringify(result.issues), JSON.stringify(result.recommendations),
       result.score, JSON.stringify(result.category_scores), JSON.stringify(result),
+      result.instagram_url || '', result.facebook_url || '', JSON.stringify(result.extracted_emails || []),
     ];
 
     db.prepare(`
@@ -66,6 +68,15 @@ export async function POST(request: NextRequest) {
     // Update lead score and status
     db.prepare('UPDATE leads SET score = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(result.score, lead_id);
+
+    // Auto-populate lead email if extracted and not already set
+    if (result.extracted_emails.length > 0 && lead_id) {
+      const lead = db.prepare('SELECT email FROM leads WHERE id = ?').get(lead_id) as { email?: string } | undefined;
+      if (lead && !lead.email) {
+        db.prepare('UPDATE leads SET email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(result.extracted_emails[0], lead_id);
+      }
+    }
 
     return NextResponse.json(result);
   } catch (error: unknown) {

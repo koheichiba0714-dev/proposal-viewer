@@ -113,7 +113,7 @@ function initializeDb(db: Database.Database) {
       lead_id INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
       email_id INTEGER REFERENCES emails(id),
       proposal_id INTEGER REFERENCES proposals(id),
-      event_type TEXT NOT NULL CHECK(event_type IN ('email_open','proposal_view','proposal_click')),
+      event_type TEXT NOT NULL CHECK(event_type IN ('email_open','proposal_view','proposal_click','duration_update')),
       ip_address TEXT DEFAULT '',
       user_agent TEXT DEFAULT '',
       duration_seconds INTEGER DEFAULT 0,
@@ -199,6 +199,11 @@ function migrateDb(db: Database.Database) {
   addCol('analyses', 'has_sri', 'INTEGER', '0');
   addCol('analyses', 'has_aria', 'INTEGER', '0');
   addCol('analyses', 'has_skip_link', 'INTEGER', '0');
+
+  // analyses — SNS & email extraction
+  addCol('analyses', 'instagram_url', 'TEXT', "''");
+  addCol('analyses', 'facebook_url', 'TEXT', "''");
+  addCol('analyses', 'extracted_emails', 'TEXT', "'[]'");
 
   // emails
   addCol('emails', 'sequence_order', 'INTEGER', '1');

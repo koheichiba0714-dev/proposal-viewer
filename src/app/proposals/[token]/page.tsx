@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 
 interface ProposalData {
@@ -21,6 +21,8 @@ export default function ProposalPage() {
     const [data, setData] = useState<ProposalData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const startTimeRef = useRef<number>(Date.now());
+    const trackedRef = useRef(false);
 
     useEffect(() => {
         fetch(`/api/proposals/${token}`)
@@ -37,6 +39,47 @@ export default function ProposalPage() {
                 setLoading(false);
             });
     }, [token]);
+
+    // Tracking: proposal_view + duration
+    useEffect(() => {
+        if (loading || error || !data || trackedRef.current) return;
+        trackedRef.current = true;
+        startTimeRef.current = Date.now();
+
+        // Send initial proposal_view event
+        fetch('/api/tracking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, event_type: 'proposal_view' }),
+        }).catch(() => { });
+
+        // Update duration every 10 seconds
+        const interval = setInterval(() => {
+            const seconds = Math.round((Date.now() - startTimeRef.current) / 1000);
+            fetch('/api/tracking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, event_type: 'duration_update', duration_seconds: seconds }),
+            }).catch(() => { });
+        }, 10000);
+
+        // Send final duration on page leave
+        const handleBeforeUnload = () => {
+            const seconds = Math.round((Date.now() - startTimeRef.current) / 1000);
+            navigator.sendBeacon('/api/tracking', JSON.stringify({
+                token, event_type: 'duration_update', duration_seconds: seconds,
+            }));
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            // Also send on unmount
+            handleBeforeUnload();
+        };
+    }, [loading, error, data, token]);
 
     if (loading) {
         return (
@@ -140,3 +183,4 @@ export default function ProposalPage() {
         </div>
     );
 }
+

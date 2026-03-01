@@ -353,3 +353,106 @@ ${currentHtml}
 
     throw lastError || new Error('All models failed');
 }
+
+/**
+ * Generate a persuasive sales email using Gemini AI
+ */
+interface SalesEmailInput {
+    companyName: string;
+    industry: string;
+    area: string;
+    websiteUrl: string;
+    score: number;
+    issues: string[];
+    praises: string[];
+    proposalUrl: string;
+    instagramUrl?: string;
+    facebookUrl?: string;
+    senderName?: string;
+    senderCompany?: string;
+}
+
+export async function generateSalesEmail(input: SalesEmailInput): Promise<{ subject: string; bodyHtml: string }> {
+    const topIssue = input.issues.length > 0 ? input.issues[0] : 'モバイル対応が不十分';
+    const topPraise = input.praises.length > 0 ? input.praises[0] : '事業への情熱が伝わるサイト';
+
+    const snsContext = input.instagramUrl
+        ? `\n# SNS情報\n- Instagram: ${input.instagramUrl}（アカウント発見済み）\n${input.facebookUrl ? `- Facebook: ${input.facebookUrl}\n` : ''}- ★重要: 「せっかくInstagramアカウントがあるのに、WEBサイトの構造が古いため導線が死んでいます」という切り口で、サイトリニューアルの動機付けをする\n- メール本文にInstagramアカウントへのリンクを動的に埋め込み、「御社のInstagram(リンク)を拝見しましたが〜」と具体性を持たせる`
+        : `\n# SNS情報\n- Instagram: 未開設\n${input.facebookUrl ? `- Facebook: ${input.facebookUrl}\n` : ''}- ★重要: 「${input.area || '周辺'}の同業他社はInstagramで施工事例や若手職人の採用を発信していますが、御社はSNSの入り口がなく、致命的な機会損失を起こしています」と指摘し、LP制作＋SNS運用のセット提案を唯一の解決策として突きつける`;
+
+    const prompt = `あなたは日本の中小企業向けWEB制作会社の営業担当です。
+以下のデータを基に、初回営業メール（HTMLメール）を作成してください。
+
+# 宛先企業
+- 企業名：${input.companyName}
+- 業種：${input.industry || '不明'}
+- エリア：${input.area || '不明'}
+- 現在のサイト：${input.websiteUrl || '不明'}
+- サイト診断スコア：${input.score}/100点
+${snsContext}
+
+# 診断で判明した課題（上位3つ）
+${input.issues.slice(0, 3).map((issue, i) => `${i + 1}. ${issue}`).join('\n')}
+
+# 良い点
+- ${topPraise}
+
+# 提案レポートURL
+${input.proposalUrl}
+
+# メール設計方針（この順序で構成すること）
+1. **挨拶と導入**: 「突然のご連絡失礼します」から始め、「貴社のホームページを拝見し〜」で共感
+2. **1つの具体的な課題指摘**: 「${topIssue}」を「わかりやすい言葉で」指摘。専門用語を使わず、「お客様がスマホで見た時に〜」のように、経営者が実感できる表現にする
+3. **SNSの切り口を活用**: 上記SNS情報のパターンに応じた提案を自然に織り交ぜる
+4. **同業他社の成功の匂わせ**: 「同じ${input.industry || '業種'}のお客様で、サイトを見直したことで月の問い合わせが○件増えた事例があります」など（具体的な数字は${input.industry}の相場観で自然に推定）
+5. **無料診断レポートへの誘導**: 「参考までに、貴社専用の無料診断レポートをお作りしました」→ レポートURLへのリンク。ここが一番クリックしたくなるポイント
+6. **軽いクロージング**: 「ご多忙のところ恐縮ですが、2〜3分で読める内容です」「ご不明点はお気軽に」程度。押し売り感は排除
+
+# 出力形式
+以下のJSON形式で出力してください（JSONのみ、コードブロック不要）：
+{
+  "subject": "メールの件名（企業名と具体的なメリットを含める、20〜30文字）",
+  "bodyHtml": "HTMLメール本文"
+}
+
+# bodyHtml の要件
+- シンプルなHTMLメール（インラインCSS）
+- 文字サイズ14px程度、行間1.8
+- リンクは目立つボタン風に（背景色つき、パディング12px 28px）
+- フッターに送信者情報のプレースホルダー
+- 開封トラッキングピクセルは含めないこと（システム側で自動追加する）
+- 全体400〜600文字程度（長すぎると読まれない）
+
+JSONのみ出力。`;
+
+    const raw = await callGeminiWithRetry(
+        ['gemini-2.5-flash', 'gemini-2.0-flash'],
+        prompt,
+        `Sales Email for ${input.companyName}`
+    );
+
+    // Parse JSON from response
+    let cleaned = raw.trim();
+    cleaned = cleaned.replace(/^```json ?\s *\n ? /i, '').replace(/\n ? ```\s*$/i, '').trim();
+
+    try {
+        const parsed = JSON.parse(cleaned);
+        return {
+            subject: parsed.subject || `${input.companyName}様 ホームページ改善のご提案`,
+            bodyHtml: parsed.bodyHtml || parsed.body_html || '',
+        };
+    } catch {
+        // Fallback: if JSON parse fails, use the raw text as body
+        console.warn('[generateSalesEmail] JSON parse failed, using fallback');
+        return {
+            subject: `${input.companyName}様 ホームページ改善のご提案`,
+            bodyHtml: `< div style = "font-family:'Noto Sans JP',sans-serif;font-size:14px;line-height:1.8;color:#333;max-width:600px;margin:0 auto;padding:20px;" >
+        <p>${input.companyName} ご担当者様 </p>
+            < p > 突然のご連絡失礼いたします。</p>
+                < p > 貴社のホームページを拝見し、いくつかの改善ポイントをまとめた < strong > 無料診断レポート < /strong>をご用意いたしました。</p >
+                    <p style="text-align:center;margin:24px 0;" > <a href="${input.proposalUrl}" style = "display:inline-block;background:#1b2e4b;color:#fff;padding:14px 32px;border-radius:4px;text-decoration:none;font-weight:600;" >▶ 無料診断レポートを見る < /a></p >
+                        <p>2〜3分で読める内容です。ご不明点がございましたらお気軽にご連絡ください。</p>
+                            </div>`,
+        };
+    }
+}
